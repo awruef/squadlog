@@ -233,6 +233,12 @@ fn starting_game(timestamp: &DateTime<FixedOffset>, map_name: &str, g: &GameStat
 				current_game_start_time : timestamp.clone() }
 }
 
+//player_damaged(timestamp, &x[3], &x[2], &x[1], &x[4], x)
+
+fn player_damaged(timestamp: &DateTime<FixedOffset>, x1: &str, x2: &str, x3: &str, x4: &str, g : &GameState) -> GameState {
+	g.clone()
+}
+
 // Parse routines.
 
 fn parse_logsquad(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -> Option<GameState> {
@@ -248,12 +254,23 @@ fn parse_logsquad(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
 
     let damaged = Regex::new(r"Player:(.*) ActualDamage=(\d+\.\d+) from (.*) caused by (.*)$").unwrap();
 
-    match damaged.captures(msg) {
-        Some(x) => println!("At {}, {} did {} damage to {} with {}", timestamp, &x[3], &x[2], &x[1], &x[4]),
-        None => ()
-    }
+    let g2 = match damaged.captures(msg) {
+        Some(x) => {
+			println!("At {}, {} did {} damage to {} with {}", timestamp, &x[3], &x[2], &x[1], &x[4]);
+			match g1 {
+				Some(t) => Some(player_damaged(timestamp, &x[3], &x[2], &x[1], &x[4], &t)),
+				None => Some(player_damaged(timestamp, &x[3], &x[2], &x[1], &x[4], g))
+			}
+		},
+        None => {
+			match g1 {
+				Some(x) => Some(x),
+				None => None
+			}
+		}
+    };
 
-	g1
+	g2
 }
 
 fn parse_logtrace(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -> Option<GameState> {
