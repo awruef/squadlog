@@ -231,7 +231,7 @@ fn main() {
         .progress_chars("#>-"));
 
     let mut new :u64 = 0;
-    let mut g = GameState { games: Vec::new(), current_game_start_time : get_dt("1985.09.21-05.00.00:000").unwrap(), last_timestamp: get_dt("2020.03.07-05.48.37:879").unwrap() };
+    let mut g = GameState { games: Vec::new(), current_game_start_time : get_dt("1985.09.21-05.00.00:000").unwrap(), last_timestamp: get_dt("1985.09.21-05.00.00:000").unwrap() };
     for line in &lines {
         new = new + 1;
         match parse_line(line, &g) {
