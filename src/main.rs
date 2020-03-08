@@ -22,12 +22,12 @@ struct Player {
     name: String,
     state: PlayerState,
     hitpoints: i32,
-    last_damaged: String,
-    last_spawn_time: DateTime<FixedOffset>,
-    last_down_time: DateTime<FixedOffset>,
+    last_damaged: Option<String>,
+    last_spawn_time: Option<DateTime<FixedOffset>>,
+    last_down_time: Option<DateTime<FixedOffset>>,
     players_killed_by: HashSet<String>,
     players_killed: HashSet<String>,
-    classed_played: HashSet<String>,
+    classes_played: HashSet<String>,
     players_revived_by: HashSet<String>,
     players_revived: HashSet<String>,
 }
@@ -83,16 +83,63 @@ fn get_current_game_idx(g: &GameState) -> usize {
 
 // Update that one player revived another. 
 fn player_revived(timestamp: &DateTime<FixedOffset>, reviving: &str, revived: &str, g: GameState) -> GameState {
+	let mut my_games = g.games.clone();
     let game_idx = get_current_game_idx(&g);
-    g
+    let current_game = my_games.get_mut(game_idx).expect("Invalid index for game");
+
+	// Find both players. 
+
+	GameState { games: my_games, 
+				current_game_start_time : g.current_game_start_time, 
+				last_timestamp: g.last_timestamp }
 }
 
 // Add a player to the game state. 
 fn player_spawned(timestamp: &DateTime<FixedOffset>, name: &str, class: &str, g: &GameState) -> GameState {
 	let mut my_games = g.games.clone();
     let game_idx = get_current_game_idx(&g);
-    let mut current_game = my_games.get_mut(game_idx);
+    let current_game = my_games.get_mut(game_idx).expect("Invalid index for game");
+	
+	// See if the player is in the current_game player hash set. 
+	let mut classes_played = HashSet::new();
+	classes_played.insert(String::from(class));
+	let candidate_player = Player { name : String::from(name),
+									state: PlayerState::Inactive,
+									classes_played : classes_played.clone(),
+									hitpoints : 100,
+									last_damaged : None,
+									last_down_time : None,
+									last_spawn_time : Some(timestamp.clone()),
+									players_killed : HashSet::new(),
+									players_killed_by : HashSet::new(),
+									players_revived : HashSet::new(),
+									players_revived_by : HashSet::new() };
 
+	let new_player = match current_game.players.get(&candidate_player) {
+		Some(player) => {
+			let a : HashSet<String> = classes_played.iter().cloned().collect();
+			let b : HashSet<String> = player.classes_played.iter().cloned().collect();
+			let c : HashSet<String> = a.union(&b).cloned().collect();
+			// A player existed, update what classes they have played and their last 
+			// spawn time
+			Player {	name : player.name.clone(),
+						state : PlayerState::Playing,
+						classes_played : c,
+						hitpoints : player.hitpoints,
+						last_damaged : player.last_damaged.clone(),
+						last_down_time : player.last_down_time,
+						last_spawn_time : Some(timestamp.clone()),
+						players_killed : player.players_killed.clone(),
+						players_killed_by : player.players_killed_by.clone(),
+						players_revived : player.players_revived.clone(),
+						players_revived_by : player.players_revived_by.clone() }
+		},
+		None => {
+			candidate_player
+		}
+	};
+
+	current_game.players.replace(new_player);
     GameState { games: my_games, 
 				current_game_start_time : g.current_game_start_time, 
 				last_timestamp: g.last_timestamp }
@@ -106,6 +153,8 @@ fn starting_game(timestamp: &DateTime<FixedOffset>, map_name: &str, g: &GameStat
 						start_time : timestamp.clone() };
 	let mut games = g.games.clone();
 	games.push(new_game);
+
+	// Return a new GameState with our new game in it. 
 	GameState { games : games,
 				last_timestamp : g.last_timestamp.clone(),
 				current_game_start_time : timestamp.clone() }
