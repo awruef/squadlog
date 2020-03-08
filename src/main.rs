@@ -82,14 +82,87 @@ fn get_current_game_idx(g: &GameState) -> usize {
 // Game state updating routines.
 
 // Update that one player revived another. 
-fn player_revived(timestamp: &DateTime<FixedOffset>, reviving: &str, revived: &str, g: GameState) -> GameState {
+fn player_revived(timestamp: &DateTime<FixedOffset>, reviving: &str, revived: &str, g: &GameState) -> GameState {
 	let mut my_games = g.games.clone();
     let game_idx = get_current_game_idx(&g);
     let current_game = my_games.get_mut(game_idx).expect("Invalid index for game");
 
 	// Find both players. 
+	let reviver = Player { name : String::from(reviving),
+									state: PlayerState::Inactive,
+									classes_played : HashSet::new(),
+									hitpoints : 100,
+									last_damaged : None,
+									last_down_time : None,
+									last_spawn_time : Some(timestamp.clone()),
+									players_killed : HashSet::new(),
+									players_killed_by : HashSet::new(),
+									players_revived : HashSet::new(),
+									players_revived_by : HashSet::new() };
 
-	GameState { games: my_games, 
+	let revivee = Player { name : String::from(revived),
+									state: PlayerState::Inactive,
+									classes_played : HashSet::new(),
+									hitpoints : 100,
+									last_damaged : None,
+									last_down_time : None,
+									last_spawn_time : Some(timestamp.clone()),
+									players_killed : HashSet::new(),
+									players_killed_by : HashSet::new(),
+									players_revived : HashSet::new(),
+									players_revived_by : HashSet::new() };
+
+	let reviver_found = current_game.players.get(&reviver);
+	let revivee_found = current_game.players.get(&revivee);
+
+	let f = match (reviver_found,revivee_found) {
+		(Some(reviver),Some(revivee)) => { 
+			let mut players_revived = reviver.players_revived.clone();
+			let mut players_revived_by = revivee.players_revived_by.clone();
+			players_revived.insert(String::from(revived));
+			players_revived_by.insert(String::from(reviving));
+			
+			let new_reviver = Player { 	name : reviver.name.clone(),
+										state : reviver.state.clone(),
+										classes_played : reviver.classes_played.clone(),
+										hitpoints : reviver.hitpoints.clone(),
+										last_damaged : reviver.last_damaged.clone(),
+										last_down_time : reviver.last_down_time.clone(),
+										last_spawn_time : reviver.last_spawn_time.clone(),
+										players_killed : reviver.players_killed.clone(),
+										players_killed_by : reviver.players_killed_by.clone(),
+										players_revived : players_revived,
+										players_revived_by : reviver.players_revived_by.clone()
+									};	
+			let new_revivee = Player { 	name : revivee.name.clone(),
+										state : revivee.state.clone(),
+										classes_played : revivee.classes_played.clone(),
+										hitpoints : revivee.hitpoints.clone(),
+										last_damaged : reviver.last_damaged.clone(),
+										last_down_time : revivee.last_down_time.clone(),
+										last_spawn_time : revivee.last_spawn_time.clone(),
+										players_killed : revivee.players_killed.clone(),
+										players_killed_by : revivee.players_killed_by.clone(),
+										players_revived : revivee.players_revived.clone(),
+										players_revived_by : players_revived_by
+									};
+			Some((new_reviver, new_revivee))
+		},
+		_ => None
+	};
+
+	let new_games = match f { 
+		Some((x,y)) => {
+			let mut t1 = current_game.players.clone();
+			t1.replace(x.clone());
+			let mut t2 = t1.clone();
+			t2.replace(y.clone());
+			my_games.clone()
+		}
+		None => my_games.clone()
+	};
+
+	GameState { games: new_games, 
 				current_game_start_time : g.current_game_start_time, 
 				last_timestamp: g.last_timestamp }
 }
@@ -165,10 +238,13 @@ fn starting_game(timestamp: &DateTime<FixedOffset>, map_name: &str, g: &GameStat
 fn parse_logsquad(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -> Option<GameState> {
     let revive = Regex::new(r"(.*) has revived (.*)\.$").unwrap();
 
-    match revive.captures(msg) {
-        Some(x) => println!("At {}, {} revived {}", timestamp, &x[1], &x[2]),
-        None => ()
-    }
+    let g1 = match revive.captures(msg) {
+        Some(x) => { 
+			println!("At {}, {} revived {}", timestamp, &x[1], &x[2]);
+			Some(player_revived(timestamp, &x[1], &x[2], g))	
+		},
+        None => None
+    };
 
     let damaged = Regex::new(r"Player:(.*) ActualDamage=(\d+\.\d+) from (.*) caused by (.*)$").unwrap();
 
@@ -177,7 +253,7 @@ fn parse_logsquad(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
         None => ()
     }
 
-    None
+	g1
 }
 
 fn parse_logtrace(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -> Option<GameState> {
