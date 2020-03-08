@@ -1,6 +1,6 @@
 extern crate regex;
 extern crate chrono;
-//extern crate indicatif;
+extern crate indicatif;
 
 use std::env;
 use std::cmp;
@@ -9,7 +9,7 @@ use regex::Regex;
 use chrono::*;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-//use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 
 #[derive(Debug,Clone)]
 enum PlayerState {
@@ -98,6 +98,19 @@ fn player_spawned(timestamp: &DateTime<FixedOffset>, name: &str, class: &str, g:
 				last_timestamp: g.last_timestamp }
 }
 
+// Called when a new map is loaded. 
+fn starting_game(timestamp: &DateTime<FixedOffset>, map_name: &str, g: &GameState) -> GameState {
+	// Make a new Game. 
+	let new_game = Game { map: String::from(map_name), 
+						players: HashSet::new(), 
+						start_time : timestamp.clone() };
+	let mut games = g.games.clone();
+	games.push(new_game);
+	GameState { games : games,
+				last_timestamp : g.last_timestamp.clone(),
+				current_game_start_time : timestamp.clone() }
+}
+
 // Parse routines.
 
 fn parse_logsquad(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -> Option<GameState> {
@@ -162,14 +175,15 @@ fn parse_game_state(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState)
 fn parse_world_state(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -> Option<GameState> {
     let world_state_change = Regex::new(r"StartLoadingDestination to: /Game/Maps/(.*)").unwrap();
 
-    match world_state_change.captures(msg) {
+    let g1 = match world_state_change.captures(msg) {
         Some(x) => {    
             println!("At {}, starting game {}", timestamp, &x[1]);
+			Some(starting_game(timestamp, &x[1], g))
         },
-        None => ()
-    }
+        None => None
+    };
 
-    None
+	g1
 }
 
 fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
@@ -179,18 +193,20 @@ fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
             // Update the timestamp if the current line is newer, even if we won't process this
             // line into an update to the game state. 
             let timestamp = get_dt(&c[1]).unwrap();
-            let new_timestamp = cmp::max(timestamp, g.last_timestamp);
-            let cur_g = GameState { games: g.games.clone(), 
+			if timestamp < g.last_timestamp {
+				None
+			} else {	
+				let cur_g = GameState { games: g.games.clone(), 
 								current_game_start_time : g.current_game_start_time.clone(), 
-								last_timestamp: new_timestamp };
+								last_timestamp: timestamp };
 
-            match &c[2] {
-                "LogSquad" => parse_logsquad(&timestamp, &c[3], &cur_g),
-                "LogSquadTrace" => parse_logtrace(&timestamp, &c[3], &cur_g),
-                "LogGameState" => parse_game_state(&timestamp, &c[3], &cur_g),
-                "LogWorld" => parse_world_state(&timestamp, &c[3], &cur_g),
-                _ => Some(cur_g),
-            }},
+				match &c[2] {
+					"LogSquad" => parse_logsquad(&timestamp, &c[3], &cur_g),
+					"LogSquadTrace" => parse_logtrace(&timestamp, &c[3], &cur_g),
+					"LogGameState" => parse_game_state(&timestamp, &c[3], &cur_g),
+					"LogWorld" => parse_world_state(&timestamp, &c[3], &cur_g),
+					_ => Some(cur_g),
+            }}},
         None => None
     }
 }
@@ -209,10 +225,10 @@ fn main() {
         .expect("Error opening log file");
     let lines: Vec<&str> = logfile_contents.split("\n").collect();
 
-    /*let pb = ProgressBar::new(lines.len() as u64);  
+    let pb = ProgressBar::new(lines.len() as u64);  
     pb.set_style(ProgressStyle::default_bar()
         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {lines}/{total_lines} ({eta})")
-        .progress_chars("#>-"));*/
+        .progress_chars("#>-"));
 
     let mut new :u64 = 0;
     let mut g = GameState { games: Vec::new(), current_game_start_time : get_dt("1985.09.21-05.00.00:000").unwrap(), last_timestamp: get_dt("2020.03.07-05.48.37:879").unwrap() };
@@ -222,6 +238,6 @@ fn main() {
             Some(new_g) => g = new_g,
             None => ()
         }
-        //pb.set_position(new);
+        pb.set_position(new);
     }
 }
