@@ -3,10 +3,10 @@ extern crate chrono;
 extern crate indicatif;
 
 use std::env;
-use std::cmp;
 use std::fs;
 use regex::Regex;
 use chrono::*;
+use std::str::FromStr;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -21,7 +21,7 @@ enum PlayerState {
 struct Player {
     name: String,
     state: PlayerState,
-    hitpoints: i32,
+    hitpoints: f32,
     last_damaged: Option<String>,
     last_spawn_time: Option<DateTime<FixedOffset>>,
     last_down_time: Option<DateTime<FixedOffset>>,
@@ -91,7 +91,7 @@ fn player_revived(timestamp: &DateTime<FixedOffset>, reviving: &str, revived: &s
 	let reviver = Player { name : String::from(reviving),
 									state: PlayerState::Inactive,
 									classes_played : HashSet::new(),
-									hitpoints : 100,
+									hitpoints : 100.0,
 									last_damaged : None,
 									last_down_time : None,
 									last_spawn_time : Some(timestamp.clone()),
@@ -103,7 +103,7 @@ fn player_revived(timestamp: &DateTime<FixedOffset>, reviving: &str, revived: &s
 	let revivee = Player { name : String::from(revived),
 									state: PlayerState::Inactive,
 									classes_played : HashSet::new(),
-									hitpoints : 100,
+									hitpoints : 100.0,
 									last_damaged : None,
 									last_down_time : None,
 									last_spawn_time : Some(timestamp.clone()),
@@ -179,7 +179,7 @@ fn player_spawned(timestamp: &DateTime<FixedOffset>, name: &str, class: &str, g:
 	let candidate_player = Player { name : String::from(name),
 									state: PlayerState::Inactive,
 									classes_played : classes_played.clone(),
-									hitpoints : 100,
+									hitpoints : 100.0,
 									last_damaged : None,
 									last_down_time : None,
 									last_spawn_time : Some(timestamp.clone()),
@@ -233,9 +233,53 @@ fn starting_game(timestamp: &DateTime<FixedOffset>, map_name: &str, g: &GameStat
 				current_game_start_time : timestamp.clone() }
 }
 
-//player_damaged(timestamp, &x[3], &x[2], &x[1], &x[4], x)
+fn player_damaged(timestamp: &DateTime<FixedOffset>, shooter: &str, damage: f32, target: &str, weapon: &str, g : &GameState) -> GameState {
+	let mut my_games = g.games.clone();
+    let game_idx = get_current_game_idx(&g);
+    let current_game = my_games.get_mut(game_idx).expect("Invalid index for game");
+	
+	let shot_player = Player { name : String::from(target),
+									state: PlayerState::Inactive,
+									classes_played : HashSet::new(),
+									hitpoints : 100.0,
+									last_damaged : None,
+									last_down_time : None,
+									last_spawn_time : Some(timestamp.clone()),
+									players_killed : HashSet::new(),
+									players_killed_by : HashSet::new(),
+									players_revived : HashSet::new(),
+									players_revived_by : HashSet::new() };
 
-fn player_damaged(timestamp: &DateTime<FixedOffset>, x1: &str, x2: &str, x3: &str, x4: &str, g : &GameState) -> GameState {
+	let retrieved_player = current_game.players.get(&shot_player).expect("Should have a player if they are shot");
+
+	// If we know who did the damage, mark that in the player state for the player 
+    // that was shot. 
+	let new_shooter = if shooter != "nullptr" {
+		Some(String::from(shooter))
+	} else {
+		retrieved_player.last_damaged.clone()
+	};
+
+	let updated_player = Player { name : shot_player.name.clone(),
+									state: shot_player.state.clone(),
+									classes_played : shot_player.classes_played.clone(),
+									hitpoints : shot_player.hitpoints - damage,
+									last_damaged : new_shooter,
+									last_down_time : shot_player.last_down_time.clone(),
+									last_spawn_time : shot_player.last_spawn_time.clone(),
+									players_killed : shot_player.players_killed.clone(),
+									players_killed_by : shot_player.players_killed_by.clone(),
+									players_revived : shot_player.players_revived.clone(),
+									players_revived_by : shot_player.players_revived_by.clone() };
+
+	current_game.players.replace(updated_player);
+	GameState { games: my_games,
+				current_game_start_time : g.current_game_start_time,
+				last_timestamp: g.last_timestamp }
+}
+
+fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -> GameState {
+
 	g.clone()
 }
 
@@ -258,8 +302,8 @@ fn parse_logsquad(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
         Some(x) => {
 			println!("At {}, {} did {} damage to {} with {}", timestamp, &x[3], &x[2], &x[1], &x[4]);
 			match g1 {
-				Some(t) => Some(player_damaged(timestamp, &x[3], &x[2], &x[1], &x[4], &t)),
-				None => Some(player_damaged(timestamp, &x[3], &x[2], &x[1], &x[4], g))
+				Some(t) => Some(player_damaged(timestamp, &x[3], f32::from_str(&x[2]).unwrap(), &x[1], &x[4], &t)),
+				None => Some(player_damaged(timestamp, &x[3], f32::from_str(&x[2]).unwrap(), &x[1], &x[4], g))
 			}
 		},
         None => {
@@ -286,19 +330,37 @@ fn parse_logtrace(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
 
     let down = Regex::new(r"\[DedicatedServer\]ASQSoldier::Wound\(\): Player:(.*) KillingDamage=(\d+.\d+) from (.*) caused by (.*)").unwrap();
 
-    match down.captures(msg) {
-        Some(c) => println!("At {}, player {} went down", timestamp, &c[1]),
-        None => ()
-    }
+    let g2 = match down.captures(msg) {
+        Some(c) => { 
+			println!("At {}, player {} went down", timestamp, &c[1]);
+			match g1 {
+				Some(t) => Some(player_down(timestamp, &c[1], &t)),
+				None => Some(player_down(timestamp, &c[1], g))
+			}
+		},
+        None => match g1 {
+			Some(t) => Some(t),
+			None => None
+		}
+    };
 
     let statechange = Regex::new(r"\[DedicatedServer\]ASQPlayerController::ChangeState\(\): PC=(.*) OldState=(.*) NewState=(.*)").unwrap();
 
-    match statechange.captures(msg) {
-        Some(c) => println!("At {}, player {} changed from {} to {}", timestamp, &c[1], &c[2], &c[3]),
-        None => ()
-    }
+    let g3 = match statechange.captures(msg) {
+        Some(c) => {
+			println!("At {}, player {} changed from {} to {}", timestamp, &c[1], &c[2], &c[3]);
+			match g2 {
+				Some(t) => Some(t),
+				None => None
+			}
+		},
+        None => match g2 {
+			Some(t) => Some(t),
+			None => None
+		}
+    };
 
-	g1
+	g3
 }
 
 fn parse_game_state(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -> Option<GameState> {
@@ -338,6 +400,7 @@ fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
 			if timestamp < g.last_timestamp {
 				None
 			} else {	
+				// TODO: this throws away timestamps sometimes. 
 				let cur_g = GameState { games: g.games.clone(), 
 								current_game_start_time : g.current_game_start_time.clone(), 
 								last_timestamp: timestamp };
@@ -361,7 +424,6 @@ fn main() {
 
     let statefile = &args[1];
     let logfile = &args[2];
-    println!("statefile == {} logfile == {}", statefile, logfile);
 
     let logfile_contents = fs::read_to_string(logfile)
         .expect("Error opening log file");
@@ -373,7 +435,9 @@ fn main() {
         .progress_chars("#>-"));
 
     let mut new :u64 = 0;
-    let mut g = GameState { games: Vec::new(), current_game_start_time : get_dt("1985.09.21-05.00.00:000").unwrap(), last_timestamp: get_dt("1985.09.21-05.00.00:000").unwrap() };
+    let mut g = GameState { games: Vec::new(), 
+						current_game_start_time : get_dt("1985.09.21-05.00.00:000").unwrap(), 
+						last_timestamp: get_dt("1985.09.21-05.00.00:000").unwrap() };
     for line in &lines {
         new = new + 1;
         match parse_line(line, &g) {
