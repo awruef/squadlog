@@ -1,6 +1,7 @@
 extern crate regex;
 extern crate chrono;
 extern crate indicatif;
+extern crate bimap;
 
 use std::env;
 use std::fs;
@@ -8,6 +9,7 @@ use regex::Regex;
 use chrono::*;
 use std::str::FromStr;
 use std::collections::HashSet;
+use bimap::BiMap;
 use std::hash::{Hash, Hasher};
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -55,6 +57,81 @@ struct GameState {
     games: Vec<Game>, // Sorted by start_time, from earliest to latest. 
     current_game_start_time: DateTime<FixedOffset>,
     last_timestamp: DateTime<FixedOffset>,
+	player_names : Vec<(String, Option<String>)>, 
+}
+
+fn seen_player_name(name: &String, names: &Vec<(String, Option<String>)>) -> Vec<(String, Option<String>)> {
+    println!("seen_player_name name == {} names == {:?}", name, names);
+    let mut res = None;
+    for (left, right) in names {
+        if left == name {
+            match right {
+                Some(_t) => {
+                    res = Some(names.clone())
+                }
+                None => ()
+            }
+        }
+    }
+
+    match res {
+        Some(t) => t,
+        None => {
+            let mut my_names = names.clone();
+            my_names.push((String::from(name), None));
+            my_names
+        }
+    }
+    //res.unwrap()
+    // Update names if it doesn't contain a get_by_left mapping for name.
+    /*match names.get_by_left(name) {
+        Some(_t) => {
+            names.clone()
+        }
+        None => {
+            let mut my_names = names.clone();
+            my_names.insert(String::from(name), None);
+            println!("Did update! Added {:?}", my_names);
+            my_names
+        }
+    }*/
+    //names.clone()
+}
+
+fn lookup_player_name(name: &String, names: &Vec<(String, Option<String>)>) -> (String, Vec<(String, Option<String>)>) {
+    println!("lookup_player_name name == {} names == {:?}", name, names);
+	// First, check to see if we have a direct mapping. 
+	/*match names.get_by_right(&Some(name.clone())) {
+		Some(realname) => {
+            // Case 1, nothing to do, we have a full mapping between the names, return it. 
+            (realname.clone(), names.clone())
+        },
+		None => {
+            // Now, we need to go through the keys on the left to see if anything is a close
+            // match. 
+            let my_names = names.clone();
+            let mut res = None;
+            let mut key = None;
+            for (left, _right) in &my_names {
+                if left.len() < name.len() {
+                    let tag_len = name.len()-left.len();
+                    let s1 = &name[tag_len..];
+                    if s1 == left {
+                        res = Some(left);
+                        key = Some(name);
+                    }
+                }
+            }
+
+
+            let i = res.unwrap();
+            let j = key.unwrap();
+            let mut inserted_names = my_names.clone();
+            inserted_names.insert(i.clone(),Some(j.clone()));
+            (i.clone(), inserted_names)
+        }
+	}*/
+    (String::from(""),names.clone())
 }
 
 fn game_ended(g: &Game) {
@@ -164,7 +241,8 @@ fn player_revived(timestamp: &DateTime<FixedOffset>, reviving: &str, revived: &s
 
 	GameState { games: new_games, 
 				current_game_start_time : g.current_game_start_time, 
-				last_timestamp: g.last_timestamp }
+				last_timestamp: g.last_timestamp,
+				player_names : g.player_names.clone()  }
 }
 
 // Add a player to the game state. 
@@ -215,7 +293,8 @@ fn player_spawned(timestamp: &DateTime<FixedOffset>, name: &str, class: &str, g:
 	current_game.players.replace(new_player);
     GameState { games: my_games, 
 				current_game_start_time : g.current_game_start_time, 
-				last_timestamp: g.last_timestamp }
+				last_timestamp: g.last_timestamp,
+				player_names : g.player_names.clone() }
 }
 
 // Called when a new map is loaded. 
@@ -229,16 +308,19 @@ fn starting_game(timestamp: &DateTime<FixedOffset>, map_name: &str, g: &GameStat
 
 	// Return a new GameState with our new game in it. 
 	GameState { games : games,
-				last_timestamp : g.last_timestamp.clone(),
-				current_game_start_time : timestamp.clone() }
+				last_timestamp : g.last_timestamp,
+				current_game_start_time : timestamp.clone(),
+				player_names : g.player_names.clone() }
 }
 
 fn player_damaged(timestamp: &DateTime<FixedOffset>, shooter: &str, damage: f32, target: &str, weapon: &str, g : &GameState) -> GameState {
 	let mut my_games = g.games.clone();
     let game_idx = get_current_game_idx(&g);
     let current_game = my_games.get_mut(game_idx).expect("Invalid index for game");
-	
-	let shot_player = Player { name : String::from(target),
+    let (resolved_name,new_player_names) = lookup_player_name(&String::from(target), &g.player_names);
+
+    println!("player_damaged new_player_names == {:?}", new_player_names);
+	let shot_player = Player { name : resolved_name.clone(),
 									state: PlayerState::Inactive,
 									classes_played : HashSet::new(),
 									hitpoints : 100.0,
@@ -250,6 +332,9 @@ fn player_damaged(timestamp: &DateTime<FixedOffset>, shooter: &str, damage: f32,
 									players_revived : HashSet::new(),
 									players_revived_by : HashSet::new() };
 
+	println!("player: {}", resolved_name);
+	println!("player_damaged current_game.players == {:?}", current_game.players);
+    println!("player_names == {:?}", g.player_names);
 	let retrieved_player = current_game.players.get(&shot_player).expect("Should have a player if they are shot");
 
 	// If we know who did the damage, mark that in the player state for the player 
@@ -275,12 +360,83 @@ fn player_damaged(timestamp: &DateTime<FixedOffset>, shooter: &str, damage: f32,
 	current_game.players.replace(updated_player);
 	GameState { games: my_games,
 				current_game_start_time : g.current_game_start_time,
-				last_timestamp: g.last_timestamp }
+				last_timestamp: g.last_timestamp,
+				player_names : new_player_names }
 }
 
 fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -> GameState {
+	let mut my_games = g.games.clone();
+    let game_idx = get_current_game_idx(&g);
+    let current_game = my_games.get_mut(game_idx).expect("Invalid index for game");
+	
+	let downed_player = Player { name : String::from(player),
+									state: PlayerState::Inactive,
+									classes_played : HashSet::new(),
+									hitpoints : 100.0,
+									last_damaged : None,
+									last_down_time : None,
+									last_spawn_time : Some(timestamp.clone()),
+									players_killed : HashSet::new(),
+									players_killed_by : HashSet::new(),
+									players_revived : HashSet::new(),
+									players_revived_by : HashSet::new() };
 
-	g.clone()
+	let retrieved_player = current_game.players.get(&downed_player).expect("Should have a player if they go down");
+
+	// Who was the player last shot by? Update their stats with that information.
+
+	match &retrieved_player.last_damaged {
+		Some(killer_name) => {
+			let killing_player_l = Player { name : String::from(killer_name),
+									state: PlayerState::Inactive,
+									classes_played : HashSet::new(),
+									hitpoints : 100.0,
+									last_damaged : None,
+									last_down_time : None,
+									last_spawn_time : Some(timestamp.clone()),
+									players_killed : HashSet::new(),
+									players_killed_by : HashSet::new(),
+									players_revived : HashSet::new(),
+									players_revived_by : HashSet::new() };
+
+			let killing_player = current_game.players.get(&killing_player_l).expect("Should have this");
+			let mut downed_killed_by = downed_player.players_killed_by.clone();
+			downed_killed_by.insert(String::from(killer_name));
+			let mut killing_killed = killing_player.players_killed.clone();
+			killing_killed.insert(String::from(player));
+		
+			let new_downed_player = Player { 	name : downed_player.name.clone(),
+												state : downed_player.state.clone(),
+												classes_played : downed_player.classes_played.clone(),
+												hitpoints : downed_player.hitpoints,
+												last_damaged : None,
+												last_down_time : Some(timestamp.clone()),
+												last_spawn_time : downed_player.last_spawn_time.clone(),
+												players_killed : downed_player.players_killed.clone(),
+												players_killed_by : downed_killed_by,
+												players_revived : downed_player.players_revived.clone(),
+												players_revived_by : downed_player.players_revived_by.clone() };		
+			let new_killing_player = Player { 	name : killing_player.name.clone(),
+												state : killing_player.state.clone(),
+												classes_played : killing_player.classes_played.clone(),
+												hitpoints : killing_player.hitpoints,
+												last_damaged : killing_player.last_damaged.clone(),
+												last_down_time : killing_player.last_down_time.clone(),
+												last_spawn_time : killing_player.last_spawn_time.clone(),
+												players_killed : killing_killed,
+												players_killed_by : killing_player.players_killed_by.clone(),
+												players_revived : killing_player.players_revived.clone(),
+												players_revived_by : killing_player.players_revived_by.clone() };
+			current_game.players.replace(new_downed_player);
+			current_game.players.replace(new_killing_player);
+		},
+		None => ()	
+	};
+
+	GameState { games: my_games,
+				current_game_start_time : g.current_game_start_time,
+				last_timestamp: g.last_timestamp,
+				player_names : g.player_names.clone() }
 }
 
 // Parse routines.
@@ -350,8 +506,21 @@ fn parse_logtrace(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
         Some(c) => {
 			println!("At {}, player {} changed from {} to {}", timestamp, &c[1], &c[2], &c[3]);
 			match g2 {
-				Some(t) => Some(t),
-				None => None
+				Some(t) => {
+                    let newg = GameState {  current_game_start_time : t.current_game_start_time.clone(),
+                                            games: t.games.clone(),
+                                            last_timestamp : t.last_timestamp.clone(),
+                                            player_names : seen_player_name(&String::from(&c[1]), &t.player_names)};
+                    Some(newg)
+
+                },
+				None => {
+                    let newg = GameState {  current_game_start_time : g.current_game_start_time.clone(),
+                                            games: g.games.clone(),
+                                            last_timestamp : g.last_timestamp.clone(),
+                                            player_names : seen_player_name(&String::from(&c[1]), &g.player_names)};
+                    Some(newg)
+                }
 			}
 		},
         None => match g2 {
@@ -403,7 +572,8 @@ fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
 				// TODO: this throws away timestamps sometimes. 
 				let cur_g = GameState { games: g.games.clone(), 
 								current_game_start_time : g.current_game_start_time.clone(), 
-								last_timestamp: timestamp };
+								last_timestamp: timestamp,
+								player_names : g.player_names.clone() };
 
 				match &c[2] {
 					"LogSquad" => parse_logsquad(&timestamp, &c[3], &cur_g),
@@ -429,21 +599,23 @@ fn main() {
         .expect("Error opening log file");
     let lines: Vec<&str> = logfile_contents.split("\n").collect();
 
-    let pb = ProgressBar::new(lines.len() as u64);  
+    /*let pb = ProgressBar::new(lines.len() as u64);  
     pb.set_style(ProgressStyle::default_bar()
         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {lines}/{total_lines} ({eta})")
-        .progress_chars("#>-"));
+        .progress_chars("#>-"));*/
 
     let mut new :u64 = 0;
     let mut g = GameState { games: Vec::new(), 
 						current_game_start_time : get_dt("1985.09.21-05.00.00:000").unwrap(), 
-						last_timestamp: get_dt("1985.09.21-05.00.00:000").unwrap() };
+						last_timestamp: get_dt("1985.09.21-05.00.00:000").unwrap(),
+						player_names: Vec::new() };
     for line in &lines {
         new = new + 1;
+        //println!("line == {} state == {:?}", line, g);
         match parse_line(line, &g) {
             Some(new_g) => g = new_g,
             None => ()
         }
-        pb.set_position(new);
+        //pb.set_position(new);
     }
 }

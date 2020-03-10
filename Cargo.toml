@@ -8,3 +8,4 @@ authors = [ "Andrew Ruef <awruef@outlook.com>" ]
 regex = "1"
 indicatif = "0.14.0"
 chrono = "0.4.11"
+bimap = "0.4.0"
