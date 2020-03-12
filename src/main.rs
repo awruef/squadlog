@@ -9,7 +9,6 @@ use regex::Regex;
 use chrono::*;
 use std::str::FromStr;
 use std::collections::HashSet;
-use bimap::BiMap;
 use std::hash::{Hash, Hasher};
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -82,56 +81,46 @@ fn seen_player_name(name: &String, names: &Vec<(String, Option<String>)>) -> Vec
             my_names
         }
     }
-    //res.unwrap()
-    // Update names if it doesn't contain a get_by_left mapping for name.
-    /*match names.get_by_left(name) {
-        Some(_t) => {
-            names.clone()
-        }
-        None => {
-            let mut my_names = names.clone();
-            my_names.insert(String::from(name), None);
-            println!("Did update! Added {:?}", my_names);
-            my_names
-        }
-    }*/
-    //names.clone()
 }
 
 fn lookup_player_name(name: &String, names: &Vec<(String, Option<String>)>) -> (String, Vec<(String, Option<String>)>) {
     println!("lookup_player_name name == {} names == {:?}", name, names);
-	// First, check to see if we have a direct mapping. 
-	/*match names.get_by_right(&Some(name.clone())) {
-		Some(realname) => {
-            // Case 1, nothing to do, we have a full mapping between the names, return it. 
-            (realname.clone(), names.clone())
-        },
-		None => {
-            // Now, we need to go through the keys on the left to see if anything is a close
-            // match. 
+    let mut res = None;
+    for (left,right) in names {
+        match right {
+            Some(realname) => {
+                if name == realname {
+                    res = Some(left);
+                }
+            }
+            None => ()
+        }
+    }
+
+    match res {
+        Some(n) => (n.clone(),names.clone()),
+        None => {
+            let mut new_names : Vec<(String, Option<String>)> = Vec::new();
             let my_names = names.clone();
-            let mut res = None;
-            let mut key = None;
-            for (left, _right) in &my_names {
-                if left.len() < name.len() {
+            let mut found_name = None;
+            for (left, right) in my_names {
+                if left.len() <= name.len() {
                     let tag_len = name.len()-left.len();
                     let s1 = &name[tag_len..];
                     if s1 == left {
-                        res = Some(left);
-                        key = Some(name);
+                        new_names.push((left.clone(), Some(name.clone())));
+                        found_name = Some(left.clone())
+                    } else {
+                        new_names.push((left, right));
                     }
+                } else {
+                    new_names.push((left, right));
                 }
-            }
+            };
 
-
-            let i = res.unwrap();
-            let j = key.unwrap();
-            let mut inserted_names = my_names.clone();
-            inserted_names.insert(i.clone(),Some(j.clone()));
-            (i.clone(), inserted_names)
+            (found_name.unwrap(),new_names)
         }
-	}*/
-    (String::from(""),names.clone())
+    }
 }
 
 fn game_ended(g: &Game) {
@@ -368,8 +357,9 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
 	let mut my_games = g.games.clone();
     let game_idx = get_current_game_idx(&g);
     let current_game = my_games.get_mut(game_idx).expect("Invalid index for game");
+    let (resolved_player_name,new_player_names) = lookup_player_name(&String::from(player), &g.player_names);
 	
-	let downed_player = Player { name : String::from(player),
+	let downed_player = Player { name : String::from(resolved_player_name.clone()),
 									state: PlayerState::Inactive,
 									classes_played : HashSet::new(),
 									hitpoints : 100.0,
@@ -385,9 +375,14 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
 
 	// Who was the player last shot by? Update their stats with that information.
 
+    let mut m_player_names = new_player_names.clone();
 	match &retrieved_player.last_damaged {
 		Some(killer_name) => {
-			let killing_player_l = Player { name : String::from(killer_name),
+
+            let (resolved_killer_name,new_player_names_2) = lookup_player_name(&String::from(killer_name), 
+                                                                                &new_player_names.clone());
+            m_player_names = new_player_names_2;
+			let killing_player_l = Player { name : String::from(resolved_killer_name.clone()),
 									state: PlayerState::Inactive,
 									classes_played : HashSet::new(),
 									hitpoints : 100.0,
@@ -401,9 +396,9 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
 
 			let killing_player = current_game.players.get(&killing_player_l).expect("Should have this");
 			let mut downed_killed_by = downed_player.players_killed_by.clone();
-			downed_killed_by.insert(String::from(killer_name));
+			downed_killed_by.insert(String::from(resolved_killer_name.clone()));
 			let mut killing_killed = killing_player.players_killed.clone();
-			killing_killed.insert(String::from(player));
+			killing_killed.insert(String::from(resolved_player_name.clone()));
 		
 			let new_downed_player = Player { 	name : downed_player.name.clone(),
 												state : downed_player.state.clone(),
@@ -436,7 +431,7 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
 	GameState { games: my_games,
 				current_game_start_time : g.current_game_start_time,
 				last_timestamp: g.last_timestamp,
-				player_names : g.player_names.clone() }
+				player_names : m_player_names }
 }
 
 // Parse routines.
@@ -457,10 +452,15 @@ fn parse_logsquad(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
     let g2 = match damaged.captures(msg) {
         Some(x) => {
 			println!("At {}, {} did {} damage to {} with {}", timestamp, &x[3], &x[2], &x[1], &x[4]);
-			match g1 {
-				Some(t) => Some(player_damaged(timestamp, &x[3], f32::from_str(&x[2]).unwrap(), &x[1], &x[4], &t)),
-				None => Some(player_damaged(timestamp, &x[3], f32::from_str(&x[2]).unwrap(), &x[1], &x[4], g))
-			}
+            // Sometimes, someone damages nullptr. Ignore that. 
+            if &x[1] == "nullptr" {
+                None
+            } else {
+                match g1 {
+                    Some(t) => Some(player_damaged(timestamp, &x[3], f32::from_str(&x[2]).unwrap(), &x[1], &x[4], &t)),
+                    None => Some(player_damaged(timestamp, &x[3], f32::from_str(&x[2]).unwrap(), &x[1], &x[4], g))
+                }
+            }
 		},
         None => {
 			match g1 {
@@ -489,10 +489,14 @@ fn parse_logtrace(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
     let g2 = match down.captures(msg) {
         Some(c) => { 
 			println!("At {}, player {} went down", timestamp, &c[1]);
-			match g1 {
-				Some(t) => Some(player_down(timestamp, &c[1], &t)),
-				None => Some(player_down(timestamp, &c[1], g))
-			}
+            if &c[1] == "nullptr" {
+                None
+            } else {
+                match g1 {
+                    Some(t) => Some(player_down(timestamp, &c[1], &t)),
+                    None => Some(player_down(timestamp, &c[1], g))
+                }
+            }
 		},
         None => match g1 {
 			Some(t) => Some(t),
