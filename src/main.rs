@@ -60,7 +60,7 @@ struct GameState {
 }
 
 fn seen_player_name(name: &String, names: &Vec<(String, Option<String>)>) -> Vec<(String, Option<String>)> {
-    println!("seen_player_name name == {} names == {:?}", name, names);
+    //println!("seen_player_name name == {} names == {:?}", name, names);
     let mut res = None;
     for (left, right) in names {
         if left == name {
@@ -84,7 +84,7 @@ fn seen_player_name(name: &String, names: &Vec<(String, Option<String>)>) -> Vec
 }
 
 fn lookup_player_name(name: &String, names: &Vec<(String, Option<String>)>) -> (String, Vec<(String, Option<String>)>) {
-    println!("lookup_player_name name == {} names == {:?}", name, names);
+    //println!("lookup_player_name name == {} names == {:?}", name, names);
     let mut res = None;
     for (left,right) in names {
         match right {
@@ -105,8 +105,7 @@ fn lookup_player_name(name: &String, names: &Vec<(String, Option<String>)>) -> (
             let mut found_name = None;
             for (left, right) in my_names {
                 if left.len() <= name.len() {
-                    let tag_len = name.len()-left.len();
-                    let s1 = &name[tag_len..];
+                    let s1 = name.split_at(name.len() - left.len()).1;
                     if s1 == left {
                         new_names.push((left.clone(), Some(name.clone())));
                         found_name = Some(left.clone())
@@ -308,7 +307,6 @@ fn player_damaged(timestamp: &DateTime<FixedOffset>, shooter: &str, damage: f32,
     let current_game = my_games.get_mut(game_idx).expect("Invalid index for game");
     let (resolved_name,new_player_names) = lookup_player_name(&String::from(target), &g.player_names);
 
-    println!("player_damaged new_player_names == {:?}", new_player_names);
 	let shot_player = Player { name : resolved_name.clone(),
 									state: PlayerState::Inactive,
 									classes_played : HashSet::new(),
@@ -321,9 +319,6 @@ fn player_damaged(timestamp: &DateTime<FixedOffset>, shooter: &str, damage: f32,
 									players_revived : HashSet::new(),
 									players_revived_by : HashSet::new() };
 
-	println!("player: {}", resolved_name);
-	println!("player_damaged current_game.players == {:?}", current_game.players);
-    println!("player_names == {:?}", g.player_names);
 	let retrieved_player = current_game.players.get(&shot_player).expect("Should have a player if they are shot");
 
 	// If we know who did the damage, mark that in the player state for the player 
@@ -441,7 +436,7 @@ fn parse_logsquad(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
 
     let g1 = match revive.captures(msg) {
         Some(x) => { 
-			println!("At {}, {} revived {}", timestamp, &x[1], &x[2]);
+			//println!("At {}, {} revived {}", timestamp, &x[1], &x[2]);
 			Some(player_revived(timestamp, &x[1], &x[2], g))	
 		},
         None => None
@@ -478,7 +473,7 @@ fn parse_logtrace(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
 
     let g1 = match role.captures(msg) {
         Some(c) => if &c[2] != "nullptr" { 
-			println!("At {}, player {} classed {}", timestamp, &c[1], &c[2]);
+			//println!("At {}, player {} classed {}", timestamp, &c[1], &c[2]);
 			Some(player_spawned(timestamp, &c[1], &c[2], g))
 		} else { None },
         None => None
@@ -488,7 +483,7 @@ fn parse_logtrace(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
 
     let g2 = match down.captures(msg) {
         Some(c) => { 
-			println!("At {}, player {} went down", timestamp, &c[1]);
+			//println!("At {}, player {} went down", timestamp, &c[1]);
             if &c[1] == "nullptr" {
                 None
             } else {
@@ -508,7 +503,7 @@ fn parse_logtrace(timestamp: &DateTime<FixedOffset>, msg: &str, g: &GameState) -
 
     let g3 = match statechange.captures(msg) {
         Some(c) => {
-			println!("At {}, player {} changed from {} to {}", timestamp, &c[1], &c[2], &c[3]);
+			//println!("At {}, player {} changed from {} to {}", timestamp, &c[1], &c[2], &c[3]);
 			match g2 {
 				Some(t) => {
                     let newg = GameState {  current_game_start_time : t.current_game_start_time.clone(),
@@ -615,7 +610,6 @@ fn main() {
 						player_names: Vec::new() };
     for line in &lines {
         new = new + 1;
-        //println!("line == {} state == {:?}", line, g);
         match parse_line(line, &g) {
             Some(new_g) => g = new_g,
             None => ()
