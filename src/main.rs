@@ -64,7 +64,6 @@ fn seen_player_name(
     name: &String,
     names: &Vec<(String, Option<String>)>,
 ) -> Vec<(String, Option<String>)> {
-    //println!("seen_player_name name == {} names == {:?}", name, names);
     let mut res = None;
     for (left, right) in names {
         if left == name {
@@ -89,7 +88,6 @@ fn lookup_player_name(
     name: &String,
     names: &Vec<(String, Option<String>)>,
 ) -> (String, Vec<(String, Option<String>)>) {
-    //println!("lookup_player_name name == {} names == {:?}", name, names);
     let mut res = None;
     for (left, right) in names {
         match right {
@@ -454,7 +452,6 @@ fn parse_logsquad(
 
     let g1 = match revive.captures(msg) {
         Some(x) => {
-            //println!("At {}, {} revived {}", timestamp, &x[1], &x[2]);
             Some(player_revived(timestamp, &x[1], &x[2], g))
         }
         None => None,
@@ -465,7 +462,6 @@ fn parse_logsquad(
 
     let g2 = match damaged.captures(msg) {
         Some(x) => {
-            //println!("At {}, {} did {} damage to {} with {}", timestamp, &x[3], &x[2], &x[1], &x[4]);
             // Sometimes, someone damages nullptr. Ignore that.
             if &x[1] == "nullptr" {
                 None
@@ -509,7 +505,6 @@ fn parse_logtrace(
     let g1 = match role.captures(msg) {
         Some(c) => {
             if &c[2] != "nullptr" {
-                //println!("At {}, player {} classed {}", timestamp, &c[1], &c[2]);
                 Some(player_spawned(timestamp, &c[1], &c[2], g))
             } else {
                 None
@@ -522,7 +517,6 @@ fn parse_logtrace(
 
     let g2 = match down.captures(msg) {
         Some(c) => {
-            //println!("At {}, player {} went down", timestamp, &c[1]);
             if &c[1] == "nullptr" {
                 None
             } else {
@@ -542,7 +536,6 @@ fn parse_logtrace(
 
     let g3 = match statechange.captures(msg) {
         Some(c) => {
-            //println!("At {}, player {} changed from {} to {}", timestamp, &c[1], &c[2], &c[3]);
             match g2 {
                 Some(t) => {
                     let newg = GameState {
@@ -582,7 +575,6 @@ fn parse_game_state(
 
     match game_state_change.captures(msg) {
         Some(x) => {
-            //println!("At {} game state changed from {} to {}", timestamp, &x[1], &x[2]);
             match &x[2] {
                 "WaitingPostMatch" => {
                     let mut my_games = g.games.clone();
@@ -620,7 +612,6 @@ fn parse_world_state(
 
     let g1 = match world_state_change.captures(msg) {
         Some(x) => {
-            //println!("At {}, starting game {}", timestamp, &x[1]);
             Some(starting_game(timestamp, &x[1], g))
         }
         None => None,
