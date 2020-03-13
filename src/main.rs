@@ -27,8 +27,8 @@ struct Player {
     last_damaged: Option<String>,
     last_spawn_time: Option<DateTime<FixedOffset>>,
     last_down_time: Option<DateTime<FixedOffset>>,
-    players_killed_by: HashSet<String>,
-    players_killed: HashSet<String>,
+    players_killed_by: HashMap<String, u32>,
+    players_killed: HashMap<String, u32>,
     classes_played: HashSet<String>,
     players_revived_by: HashSet<String>,
     players_revived: HashSet<String>,
@@ -188,7 +188,7 @@ fn player_revived(timestamp: &DateTime<FixedOffset>, reviving: &str, revived: &s
 			let new_revivee = Player { 	name : revivee.name.clone(),
 										state : revivee.state.clone(),
 										classes_played : revivee.classes_played.clone(),
-										hitpoints : revivee.hitpoints.clone(),
+										hitpoints : 5.0,
 										last_damaged : reviver.last_damaged.clone(),
 										last_down_time : revivee.last_down_time.clone(),
 										last_spawn_time : revivee.last_spawn_time.clone(),
@@ -239,8 +239,8 @@ fn player_spawned(timestamp: &DateTime<FixedOffset>, name: &str, class: &str, g:
 			Player {	name : player.name.clone(),
 						state : PlayerState::Playing,
 						classes_played : c,
-						hitpoints : player.hitpoints,
-						last_damaged : player.last_damaged.clone(),
+						hitpoints : 100.0,
+						last_damaged : None,
 						last_down_time : player.last_down_time,
 						last_spawn_time : Some(timestamp.clone()),
 						players_killed : player.players_killed.clone(),
@@ -256,8 +256,8 @@ fn player_spawned(timestamp: &DateTime<FixedOffset>, name: &str, class: &str, g:
 									last_damaged : None,
 									last_down_time : None,
 									last_spawn_time : Some(timestamp.clone()),
-									players_killed : HashSet::new(),
-									players_killed_by : HashSet::new(),
+									players_killed : HashMap::new(),
+									players_killed_by : HashMap::new(),
 									players_revived : HashSet::new(),
 									players_revived_by : HashSet::new() }
 		}
@@ -341,9 +341,9 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
 			
             let killing_player = current_game.players.get(&resolved_killer_name).expect("Should have this");
 			let mut downed_killed_by = retrieved_player.players_killed_by.clone();
-			downed_killed_by.insert(String::from(resolved_killer_name.clone()));
+            *downed_killed_by.entry(resolved_killer_name).or_insert(0) += 1;
 			let mut killing_killed = killing_player.players_killed.clone();
-			killing_killed.insert(String::from(resolved_player_name.clone()));
+            *killing_killed.entry(resolved_player_name).or_insert(0) += 1;
 		
 			let new_downed_player = Player { 	name : retrieved_player.name.clone(),
 												state : retrieved_player.state.clone(),
