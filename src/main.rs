@@ -104,8 +104,17 @@ fn lookup_player_name(name: &String, names: &Vec<(String, Option<String>)>) -> (
             let my_names = names.clone();
             let mut found_name = None;
             for (left, right) in my_names {
-                if left.len() <= name.len() {
-                    let s1 = name.split_at(name.len() - left.len()).1;
+                // Compute the length of the names in counts of characters rather 
+                // than byte lengths of the strings. 
+                let t1 : Vec<char> = name.chars().collect();
+                let t2 : Vec<char> = left.chars().collect();
+                let name_len = t1.len();
+                let left_len = t2.len();
+ 
+                if left_len <= name_len {
+                   let tag_len = name_len-left_len;
+                    let s1 : String = name.chars().take(name_len).skip(tag_len).collect();
+
                     if s1 == left {
                         new_names.push((left.clone(), Some(name.clone())));
                         found_name = Some(left.clone())
