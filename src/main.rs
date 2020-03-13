@@ -327,18 +327,6 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
     let current_game = my_games.get_mut(game_idx).expect("Invalid index for game");
     let (resolved_player_name,new_player_names) = lookup_player_name(&String::from(player), &g.player_names);
 	
-	/*let downed_player = Player { name : String::from(resolved_player_name.clone()),
-									state: PlayerState::Inactive,
-									classes_played : HashSet::new(),
-									hitpoints : 100.0,
-									last_damaged : None,
-									last_down_time : None,
-									last_spawn_time : Some(timestamp.clone()),
-									players_killed : HashSet::new(),
-									players_killed_by : HashSet::new(),
-									players_revived : HashSet::new(),
-									players_revived_by : HashSet::new() };*/
-
 	let retrieved_player = current_game.players.get(&resolved_player_name).expect("Should have a player if they go down");
 
 	// Who was the player last shot by? Update their stats with that information.
@@ -350,19 +338,8 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
             let (resolved_killer_name,new_player_names_2) = lookup_player_name(&String::from(killer_name), 
                                                                                 &new_player_names.clone());
             m_player_names = new_player_names_2;
-			/*let killing_player_l = Player { name : String::from(resolved_killer_name.clone()),
-									state: PlayerState::Inactive,
-									classes_played : HashSet::new(),
-									hitpoints : 100.0,
-									last_damaged : None,
-									last_down_time : None,
-									last_spawn_time : Some(timestamp.clone()),
-									players_killed : HashSet::new(),
-									players_killed_by : HashSet::new(),
-									players_revived : HashSet::new(),
-									players_revived_by : HashSet::new() };*/
-
-			let killing_player = current_game.players.get(&resolved_killer_name).expect("Should have this");
+			
+            let killing_player = current_game.players.get(&resolved_killer_name).expect("Should have this");
 			let mut downed_killed_by = retrieved_player.players_killed_by.clone();
 			downed_killed_by.insert(String::from(resolved_killer_name.clone()));
 			let mut killing_killed = killing_player.players_killed.clone();
