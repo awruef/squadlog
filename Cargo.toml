@@ -1,7 +1,7 @@
 [package]
 
-name = "hello_world"
-version = "0.0.1"
+name = "squadlog"
+version = "0.1"
 authors = [ "Andrew Ruef <awruef@outlook.com>" ]
 
 [dependencies]
