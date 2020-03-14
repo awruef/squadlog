@@ -8,14 +8,14 @@ extern crate serde_json;
 use chrono::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
+use serde_json::Result;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
-use serde_json::Result;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 enum PlayerState {
@@ -49,14 +49,14 @@ impl Hash for Player {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct Game {
     map: String,
     players: HashMap<String, Player>,
     start_time: DateTime<FixedOffset>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct GameState {
     games: Vec<Game>, // Sorted by start_time, from earliest to latest.
     current_game_start_time: DateTime<FixedOffset>,
@@ -189,12 +189,12 @@ fn player_revived(
 
             let new_reviver = Player {
                 players_revived: players_revived,
-                .. reviver.clone()
+                ..reviver.clone()
             };
             let new_revivee = Player {
                 players_revived_by: players_revived_by,
                 hitpoints: 5.0,
-                .. revivee.clone()
+                ..revivee.clone()
             };
             Some((new_reviver, new_revivee))
         }
@@ -248,7 +248,7 @@ fn player_spawned(
                 hitpoints: 100.0,
                 last_damaged: None,
                 last_spawn_time: Some(timestamp.clone()),
-                .. player.clone()
+                ..player.clone()
             }
         }
         None => Player {
@@ -272,7 +272,7 @@ fn player_spawned(
     GameState {
         games: my_games,
         current_game_start_time: g.current_game_start_time,
-        .. g.clone()
+        ..g.clone()
     }
 }
 
@@ -291,7 +291,7 @@ fn starting_game(timestamp: &DateTime<FixedOffset>, map_name: &str, g: &GameStat
     GameState {
         games: games,
         current_game_start_time: timestamp.clone(),
-        .. g.clone()
+        ..g.clone()
     }
 }
 
@@ -325,14 +325,14 @@ fn player_damaged(
     let updated_player = Player {
         last_damaged: new_shooter,
         hitpoints: retrieved_player.hitpoints - damage,
-        .. retrieved_player.clone()
+        ..retrieved_player.clone()
     };
 
     *current_game.players.get_mut(&updated_player.name).unwrap() = updated_player.clone();
     GameState {
         games: my_games,
         player_names: new_player_names,
-        .. *g
+        ..*g
     }
 }
 
@@ -367,17 +367,17 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
             *killing_killed.entry(resolved_player_name).or_insert(0) += 1;
 
             let new_downed_player = Player {
-                last_damaged: None, 
+                last_damaged: None,
                 last_down_time: Some(*timestamp),
                 players_killed_by: downed_killed_by,
-                .. retrieved_player.clone()
+                ..retrieved_player.clone()
             };
 
             let new_killing_player = Player {
-                players_killed : killing_killed, 
-                .. killing_player.clone()
+                players_killed: killing_killed,
+                ..killing_player.clone()
             };
-            
+
             *current_game
                 .players
                 .get_mut(&new_downed_player.name)
@@ -393,7 +393,7 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
     GameState {
         games: my_games,
         player_names: m_player_names,
-        .. *g
+        ..*g
     }
 }
 
@@ -407,9 +407,7 @@ fn parse_logsquad(
     let revive = Regex::new(r"(.*) has revived (.*)\.$").unwrap();
 
     let g1 = match revive.captures(msg) {
-        Some(x) => {
-            Some(player_revived(timestamp, &x[1], &x[2], g))
-        }
+        Some(x) => Some(player_revived(timestamp, &x[1], &x[2], g)),
         None => None,
     };
 
@@ -491,24 +489,22 @@ fn parse_logtrace(
     let statechange = Regex::new(r"\[DedicatedServer\]ASQPlayerController::ChangeState\(\): PC=(.*) OldState=(.*) NewState=(.*)").unwrap();
 
     let g3 = match statechange.captures(msg) {
-        Some(c) => {
-            match g2 {
-                Some(t) => {
-                    let newg = GameState {
-                        player_names: seen_player_name(&String::from(&c[1]), &t.player_names),
-                        .. t.clone()
-                    };
-                    Some(newg)
-                }
-                None => {
-                    let newg = GameState {
-                        player_names: seen_player_name(&String::from(&c[1]), &g.player_names),
-                        .. g.clone()
-                    };
-                    Some(newg)
-                }
+        Some(c) => match g2 {
+            Some(t) => {
+                let newg = GameState {
+                    player_names: seen_player_name(&String::from(&c[1]), &t.player_names),
+                    ..t.clone()
+                };
+                Some(newg)
             }
-        }
+            None => {
+                let newg = GameState {
+                    player_names: seen_player_name(&String::from(&c[1]), &g.player_names),
+                    ..g.clone()
+                };
+                Some(newg)
+            }
+        },
         None => match g2 {
             Some(t) => Some(t),
             None => None,
@@ -537,7 +533,7 @@ fn parse_game_state(
                         game_ended(timestamp, current_game);
                         Some(GameState {
                             player_names: Vec::new(),
-                            .. g.clone()
+                            ..g.clone()
                         })
                     } else {
                         None
@@ -561,9 +557,7 @@ fn parse_world_state(
     let world_state_change = Regex::new(r"StartLoadingDestination to: /Game/Maps/(.*)").unwrap();
 
     let g1 = match world_state_change.captures(msg) {
-        Some(x) => {
-            Some(starting_game(timestamp, &x[1], g))
-        }
+        Some(x) => Some(starting_game(timestamp, &x[1], g)),
         None => None,
     };
 
@@ -583,7 +577,7 @@ fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
                 // TODO: this throws away timestamps sometimes.
                 let cur_g = GameState {
                     last_timestamp: timestamp,
-                    .. g.clone()
+                    ..g.clone()
                 };
 
                 match &c[2] {
@@ -599,9 +593,7 @@ fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
     }
 }
 
-fn print_lifetime_stats(g: &GameState) {
-
-}
+fn print_lifetime_stats(g: &GameState) {}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -612,6 +604,16 @@ fn main() {
     let statefile = &args[1];
     let logfile = &args[2];
 
+    let mut g = match fs::read_to_string(statefile) {
+        Ok(statefile_lines) => serde_json::from_str::<GameState>(&statefile_lines).unwrap(),
+        Err(_e) => GameState {
+            games: Vec::new(),
+            current_game_start_time: get_dt("1985.09.21-05.00.00:000").unwrap(),
+            last_timestamp: get_dt("1985.09.21-05.00.00:000").unwrap(),
+            player_names: Vec::new(),
+        },
+    };
+
     let logfile_contents = fs::read_to_string(logfile).expect("Error opening log file");
     let lines: Vec<&str> = logfile_contents.split("\n").collect();
 
@@ -621,12 +623,6 @@ fn main() {
         .progress_chars("#>-"));
 
     let mut new: u64 = 0;
-    let mut g = GameState {
-        games: Vec::new(),
-        current_game_start_time: get_dt("1985.09.21-05.00.00:000").unwrap(),
-        last_timestamp: get_dt("1985.09.21-05.00.00:000").unwrap(),
-        player_names: Vec::new(),
-    };
     for line in &lines {
         new = new + 1;
         match parse_line(line, &g) {
