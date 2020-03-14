@@ -9,7 +9,6 @@ use chrono::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::Result;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
@@ -617,14 +616,14 @@ fn main() {
     let logfile_contents = fs::read_to_string(logfile).expect("Error opening log file");
     let lines: Vec<&str> = logfile_contents.split("\n").collect();
 
-    let pb = ProgressBar::new(lines.len() as u64);
+    let pb = ProgressBar::new(logfile_contents.len() as u64);
     pb.set_style(ProgressStyle::default_bar()
-        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {lines}/{total_lines} ({eta})")
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
         .progress_chars("#>-"));
 
     let mut new: u64 = 0;
     for line in &lines {
-        new = new + 1;
+        new = new + (line.len() as u64);
         match parse_line(line, &g) {
             Some(new_g) => g = new_g,
             None => (),
@@ -633,4 +632,5 @@ fn main() {
     }
 
     print_lifetime_stats(&g);
+    fs::write(statefile, serde_json::to_string(&g).expect("serialization error")).expect("IO");
 }
