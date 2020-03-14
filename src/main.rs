@@ -693,8 +693,8 @@ fn main() {
         Ok(statefile_lines) => serde_json::from_str::<GameState>(&statefile_lines).unwrap(),
         Err(_e) => GameState {
             games: Vec::new(),
-            current_game_start_time: get_dt("1985.09.21-05.00.00:000").unwrap(),
-            last_timestamp: get_dt("1985.09.21-05.00.00:000").unwrap(),
+            current_game_start_time: get_dt("1941.12.07-07.00.00:000").unwrap(),
+            last_timestamp: get_dt("1941.12.7-07.00.00:000").unwrap(),
             player_names: Vec::new(),
         },
     };
