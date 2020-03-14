@@ -643,7 +643,7 @@ fn print_lifetime_stats(g: &GameState) {
                     classes: player_state.classes_played.clone(),
                 },
             };
-            *lifetime_players.get_mut(player_name).unwrap() = updt.clone();
+            lifetime_players.insert(String::from(player_name), updt);
         }
     }
 
