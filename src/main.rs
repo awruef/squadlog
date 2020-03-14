@@ -649,7 +649,11 @@ fn print_lifetime_stats(g: &GameState) {
                         killed_by: new_kills_by,
                         revives: new_revives,
                         revived_by: new_revived_by,
-                        classes: p.classes.union(&player_state.classes_played).cloned().collect(),
+                        classes: p
+                            .classes
+                            .union(&player_state.classes_played)
+                            .cloned()
+                            .collect(),
                         ..p.clone()
                     }
                 }
