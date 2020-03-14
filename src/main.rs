@@ -33,8 +33,8 @@ struct Player {
     players_killed_by: HashMap<String, u32>,
     players_killed: HashMap<String, u32>,
     classes_played: HashSet<String>,
-    players_revived_by: HashSet<String>,
-    players_revived: HashSet<String>,
+    players_revived_by: HashMap<String, u32>,
+    players_revived: HashMap<String, u32>,
 }
 impl PartialEq for Player {
     fn eq(&self, other: &Self) -> bool {
@@ -183,8 +183,8 @@ fn player_revived(
         (Some(reviver), Some(revivee)) => {
             let mut players_revived = reviver.players_revived.clone();
             let mut players_revived_by = revivee.players_revived_by.clone();
-            players_revived.insert(String::from(revived));
-            players_revived_by.insert(String::from(reviving));
+            *players_revived.entry(String::from(revived)).or_insert(0) += 1;
+            *players_revived_by.entry(String::from(revived)).or_insert(0) += 1;
 
             let new_reviver = Player {
                 players_revived: players_revived,
@@ -260,8 +260,8 @@ fn player_spawned(
             last_spawn_time: Some(timestamp.clone()),
             players_killed: HashMap::new(),
             players_killed_by: HashMap::new(),
-            players_revived: HashSet::new(),
-            players_revived_by: HashSet::new(),
+            players_revived: HashMap::new(),
+            players_revived_by: HashMap::new(),
         },
     };
 
@@ -592,7 +592,64 @@ fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
     }
 }
 
-fn print_lifetime_stats(g: &GameState) {}
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct PlayerOutput {
+    name: String,
+    kills: HashMap<String, u32>,
+    killed_by: HashMap<String, u32>,
+    revives: HashMap<String, u32>,
+    revived_by: HashMap<String, u32>,
+    classes: HashSet<String>
+}
+
+fn print_lifetime_stats(g: &GameState) {
+    let mut lifetime_players : HashMap<String, PlayerOutput> = HashMap::new();
+
+    for game in &g.games {
+        for (player_name, player_state) in &game.players {
+            let updt = match lifetime_players.get(player_name) {
+                Some(p) => {
+                    // Merge everything. 
+                    let mut new_kills = p.kills.clone(); 
+                    for (n, c) in &player_state.players_killed {
+                        *new_kills.entry(n.clone()).or_insert(0) += c;
+                    }
+                    let mut new_kills_by = p.killed_by.clone();
+                    for (n,c) in &player_state.players_killed_by {
+                        *new_kills_by.entry(n.clone()).or_insert(0) += c;
+                    }
+                    let mut new_revives = p.revives.clone();
+                    for (n,c) in &player_state.players_revived {
+                        *new_revives.entry(n.clone()).or_insert(0) += c;
+                    }
+                    let mut new_revived_by = p.revived_by.clone();
+                    for (n,c) in &player_state.players_revived_by {
+                        *new_revived_by.entry(n.clone()).or_insert(0) += c;
+                    }
+
+                    PlayerOutput {
+                        kills: new_kills,
+                        killed_by: new_kills_by,
+                        revives: new_revives,
+                        revived_by : new_revived_by,
+                        .. p.clone()
+                    }
+                }
+                None => PlayerOutput {
+                    name: player_name.clone(),
+                    kills: player_state.players_killed.clone(),
+                    killed_by: player_state.players_killed_by.clone(),
+                    revives: player_state.players_revived.clone(),
+                    revived_by: player_state.players_revived_by.clone(),
+                    classes: player_state.classes_played.clone()
+                }
+            };
+            *lifetime_players.get_mut(player_name).unwrap() = updt.clone();
+        }
+    }
+
+    println!("{}", serde_json::to_string(&g).expect("serialization error"));
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
