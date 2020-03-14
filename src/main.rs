@@ -599,31 +599,31 @@ struct PlayerOutput {
     killed_by: HashMap<String, u32>,
     revives: HashMap<String, u32>,
     revived_by: HashMap<String, u32>,
-    classes: HashSet<String>
+    classes: HashSet<String>,
 }
 
 fn print_lifetime_stats(g: &GameState) {
-    let mut lifetime_players : HashMap<String, PlayerOutput> = HashMap::new();
+    let mut lifetime_players: HashMap<String, PlayerOutput> = HashMap::new();
 
     for game in &g.games {
         for (player_name, player_state) in &game.players {
             let updt = match lifetime_players.get(player_name) {
                 Some(p) => {
-                    // Merge everything. 
-                    let mut new_kills = p.kills.clone(); 
+                    // Merge everything.
+                    let mut new_kills = p.kills.clone();
                     for (n, c) in &player_state.players_killed {
                         *new_kills.entry(n.clone()).or_insert(0) += c;
                     }
                     let mut new_kills_by = p.killed_by.clone();
-                    for (n,c) in &player_state.players_killed_by {
+                    for (n, c) in &player_state.players_killed_by {
                         *new_kills_by.entry(n.clone()).or_insert(0) += c;
                     }
                     let mut new_revives = p.revives.clone();
-                    for (n,c) in &player_state.players_revived {
+                    for (n, c) in &player_state.players_revived {
                         *new_revives.entry(n.clone()).or_insert(0) += c;
                     }
                     let mut new_revived_by = p.revived_by.clone();
-                    for (n,c) in &player_state.players_revived_by {
+                    for (n, c) in &player_state.players_revived_by {
                         *new_revived_by.entry(n.clone()).or_insert(0) += c;
                     }
 
@@ -631,8 +631,8 @@ fn print_lifetime_stats(g: &GameState) {
                         kills: new_kills,
                         killed_by: new_kills_by,
                         revives: new_revives,
-                        revived_by : new_revived_by,
-                        .. p.clone()
+                        revived_by: new_revived_by,
+                        ..p.clone()
                     }
                 }
                 None => PlayerOutput {
@@ -641,14 +641,17 @@ fn print_lifetime_stats(g: &GameState) {
                     killed_by: player_state.players_killed_by.clone(),
                     revives: player_state.players_revived.clone(),
                     revived_by: player_state.players_revived_by.clone(),
-                    classes: player_state.classes_played.clone()
-                }
+                    classes: player_state.classes_played.clone(),
+                },
             };
             *lifetime_players.get_mut(player_name).unwrap() = updt.clone();
         }
     }
 
-    println!("{}", serde_json::to_string(&g).expect("serialization error"));
+    println!(
+        "{}",
+        serde_json::to_string(&g).expect("serialization error")
+    );
 }
 
 fn main() {
@@ -689,5 +692,9 @@ fn main() {
     }
 
     print_lifetime_stats(&g);
-    fs::write(statefile, serde_json::to_string(&g).expect("serialization error")).expect("IO");
+    fs::write(
+        statefile,
+        serde_json::to_string(&g).expect("serialization error"),
+    )
+    .expect("IO");
 }
