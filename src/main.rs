@@ -649,7 +649,7 @@ fn print_lifetime_stats(g: &GameState) {
 
     println!(
         "{}",
-        serde_json::to_string(&g).expect("serialization error")
+        serde_json::to_string(&lifetime_players).expect("serialization error")
     );
 }
 
