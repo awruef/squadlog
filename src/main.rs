@@ -236,14 +236,14 @@ fn player_spawned(
 
     let new_player = match current_game.players.get(&String::from(name)) {
         Some(player) => {
-            let a: HashSet<String> = classes_played.iter().cloned().collect();
-            let b: HashSet<String> = player.classes_played.iter().cloned().collect();
-            let c: HashSet<String> = a.union(&b).cloned().collect();
             // A player existed, update what classes they have played and their last
             // spawn time
             Player {
                 state: PlayerState::Playing,
-                classes_played: c,
+                classes_played: classes_played
+                    .union(&player.classes_played)
+                    .cloned()
+                    .collect(),
                 hitpoints: 100.0,
                 last_damaged: None,
                 last_spawn_time: Some(timestamp.clone()),
