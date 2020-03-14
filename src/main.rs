@@ -163,7 +163,7 @@ fn get_current_game_idx(g: &GameState) -> usize {
 
 // Update that one player revived another.
 fn player_revived(
-    timestamp: &DateTime<FixedOffset>,
+    _timestamp: &DateTime<FixedOffset>,
     reviving: &str,
     revived: &str,
     g: &GameState,
@@ -184,30 +184,13 @@ fn player_revived(
             players_revived_by.insert(String::from(reviving));
 
             let new_reviver = Player {
-                name: reviver.name.clone(),
-                state: reviver.state.clone(),
-                classes_played: reviver.classes_played.clone(),
-                hitpoints: reviver.hitpoints.clone(),
-                last_damaged: reviver.last_damaged.clone(),
-                last_down_time: reviver.last_down_time.clone(),
-                last_spawn_time: reviver.last_spawn_time.clone(),
-                players_killed: reviver.players_killed.clone(),
-                players_killed_by: reviver.players_killed_by.clone(),
                 players_revived: players_revived,
-                players_revived_by: reviver.players_revived_by.clone(),
+                .. reviver.clone()
             };
             let new_revivee = Player {
-                name: revivee.name.clone(),
-                state: revivee.state.clone(),
-                classes_played: revivee.classes_played.clone(),
-                hitpoints: 5.0,
-                last_damaged: reviver.last_damaged.clone(),
-                last_down_time: revivee.last_down_time.clone(),
-                last_spawn_time: revivee.last_spawn_time.clone(),
-                players_killed: revivee.players_killed.clone(),
-                players_killed_by: revivee.players_killed_by.clone(),
-                players_revived: revivee.players_revived.clone(),
                 players_revived_by: players_revived_by,
+                hitpoints: 5.0,
+                .. revivee.clone()
             };
             Some((new_reviver, new_revivee))
         }
@@ -256,17 +239,12 @@ fn player_spawned(
             // A player existed, update what classes they have played and their last
             // spawn time
             Player {
-                name: player.name.clone(),
                 state: PlayerState::Playing,
                 classes_played: c,
                 hitpoints: 100.0,
                 last_damaged: None,
-                last_down_time: player.last_down_time,
                 last_spawn_time: Some(timestamp.clone()),
-                players_killed: player.players_killed.clone(),
-                players_killed_by: player.players_killed_by.clone(),
-                players_revived: player.players_revived.clone(),
-                players_revived_by: player.players_revived_by.clone(),
+                .. player.clone()
             }
         }
         None => Player {
@@ -290,8 +268,7 @@ fn player_spawned(
     GameState {
         games: my_games,
         current_game_start_time: g.current_game_start_time,
-        last_timestamp: g.last_timestamp,
-        player_names: g.player_names.clone(),
+        .. g.clone()
     }
 }
 
@@ -309,18 +286,17 @@ fn starting_game(timestamp: &DateTime<FixedOffset>, map_name: &str, g: &GameStat
     // Return a new GameState with our new game in it.
     GameState {
         games: games,
-        last_timestamp: g.last_timestamp,
         current_game_start_time: timestamp.clone(),
-        player_names: g.player_names.clone(),
+        .. g.clone()
     }
 }
 
 fn player_damaged(
-    timestamp: &DateTime<FixedOffset>,
+    _timestamp: &DateTime<FixedOffset>,
     shooter: &str,
     damage: f32,
     target: &str,
-    weapon: &str,
+    _weapon: &str,
     g: &GameState,
 ) -> GameState {
     let mut my_games = g.games.clone();
@@ -343,25 +319,16 @@ fn player_damaged(
     };
 
     let updated_player = Player {
-        name: retrieved_player.name.clone(),
-        state: retrieved_player.state.clone(),
-        classes_played: retrieved_player.classes_played.clone(),
-        hitpoints: retrieved_player.hitpoints - damage,
         last_damaged: new_shooter,
-        last_down_time: retrieved_player.last_down_time.clone(),
-        last_spawn_time: retrieved_player.last_spawn_time.clone(),
-        players_killed: retrieved_player.players_killed.clone(),
-        players_killed_by: retrieved_player.players_killed_by.clone(),
-        players_revived: retrieved_player.players_revived.clone(),
-        players_revived_by: retrieved_player.players_revived_by.clone(),
+        hitpoints: retrieved_player.hitpoints - damage,
+        .. retrieved_player.clone()
     };
 
     *current_game.players.get_mut(&updated_player.name).unwrap() = updated_player.clone();
     GameState {
         games: my_games,
-        current_game_start_time: g.current_game_start_time,
-        last_timestamp: g.last_timestamp,
         player_names: new_player_names,
+        .. *g
     }
 }
 
@@ -396,31 +363,17 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
             *killing_killed.entry(resolved_player_name).or_insert(0) += 1;
 
             let new_downed_player = Player {
-                name: retrieved_player.name.clone(),
-                state: retrieved_player.state.clone(),
-                classes_played: retrieved_player.classes_played.clone(),
-                hitpoints: retrieved_player.hitpoints,
-                last_damaged: None,
-                last_down_time: Some(timestamp.clone()),
-                last_spawn_time: retrieved_player.last_spawn_time.clone(),
-                players_killed: retrieved_player.players_killed.clone(),
+                last_damaged: None, 
+                last_down_time: Some(*timestamp),
                 players_killed_by: downed_killed_by,
-                players_revived: retrieved_player.players_revived.clone(),
-                players_revived_by: retrieved_player.players_revived_by.clone(),
+                .. retrieved_player.clone()
             };
+
             let new_killing_player = Player {
-                name: killing_player.name.clone(),
-                state: killing_player.state.clone(),
-                classes_played: killing_player.classes_played.clone(),
-                hitpoints: killing_player.hitpoints,
-                last_damaged: killing_player.last_damaged.clone(),
-                last_down_time: killing_player.last_down_time.clone(),
-                last_spawn_time: killing_player.last_spawn_time.clone(),
-                players_killed: killing_killed,
-                players_killed_by: killing_player.players_killed_by.clone(),
-                players_revived: killing_player.players_revived.clone(),
-                players_revived_by: killing_player.players_revived_by.clone(),
+                players_killed : killing_killed, 
+                .. killing_player.clone()
             };
+            
             *current_game
                 .players
                 .get_mut(&new_downed_player.name)
@@ -435,9 +388,8 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
 
     GameState {
         games: my_games,
-        current_game_start_time: g.current_game_start_time,
-        last_timestamp: g.last_timestamp,
         player_names: m_player_names,
+        .. *g
     }
 }
 
@@ -539,19 +491,15 @@ fn parse_logtrace(
             match g2 {
                 Some(t) => {
                     let newg = GameState {
-                        current_game_start_time: t.current_game_start_time.clone(),
-                        games: t.games.clone(),
-                        last_timestamp: t.last_timestamp.clone(),
                         player_names: seen_player_name(&String::from(&c[1]), &t.player_names),
+                        .. t.clone()
                     };
                     Some(newg)
                 }
                 None => {
                     let newg = GameState {
-                        current_game_start_time: g.current_game_start_time.clone(),
-                        games: g.games.clone(),
-                        last_timestamp: g.last_timestamp.clone(),
                         player_names: seen_player_name(&String::from(&c[1]), &g.player_names),
+                        .. g.clone()
                     };
                     Some(newg)
                 }
@@ -584,10 +532,8 @@ fn parse_game_state(
                             my_games.get_mut(game_idx).expect("Invalid index for game");
                         game_ended(timestamp, current_game);
                         Some(GameState {
-                            current_game_start_time: g.current_game_start_time,
-                            games: g.games.clone(),
-                            last_timestamp: g.last_timestamp,
                             player_names: Vec::new(),
+                            .. g.clone()
                         })
                     } else {
                         None
@@ -632,10 +578,8 @@ fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
             } else {
                 // TODO: this throws away timestamps sometimes.
                 let cur_g = GameState {
-                    games: g.games.clone(),
-                    current_game_start_time: g.current_game_start_time.clone(),
                     last_timestamp: timestamp,
-                    player_names: g.player_names.clone(),
+                    .. g.clone()
                 };
 
                 match &c[2] {
