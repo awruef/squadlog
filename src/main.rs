@@ -137,8 +137,8 @@ fn lookup_player_name(
     }
 }
 
-fn game_ended(timestamp: &DateTime<FixedOffset>, g: &Game) {
-    println!("ending at {}, Game: {:?}", timestamp, g);
+fn game_ended(_timestamp: &DateTime<FixedOffset>, _g: &Game) {
+    //println!("ending at {}, Game: {:?}", timestamp, g);
 }
 
 fn get_dt(s: &str) -> Option<DateTime<FixedOffset>> {
@@ -398,22 +398,29 @@ fn player_down(timestamp: &DateTime<FixedOffset>, player: &str, g: &GameState) -
 
 // Parse routines.
 
+struct Regexes {
+    logsquad_damaged: Regex,
+    logsquad_revived: Regex,
+    line: Regex,
+    trace_role: Regex,
+    trace_down: Regex,
+    trace_statechange: Regex,
+    game_state_change: Regex,
+    world_state_change: Regex,
+}
+
 fn parse_logsquad(
     timestamp: &DateTime<FixedOffset>,
     msg: &str,
     g: &GameState,
+    r: &Regexes,
 ) -> Option<GameState> {
-    let revive = Regex::new(r"(.*) has revived (.*)\.$").unwrap();
-
-    let g1 = match revive.captures(msg) {
+    let g1 = match r.logsquad_revived.captures(msg) {
         Some(x) => Some(player_revived(timestamp, &x[1], &x[2], g)),
         None => None,
     };
 
-    let damaged =
-        Regex::new(r"Player:(.*) ActualDamage=(\d+\.\d+) from (.*) caused by (.*)$").unwrap();
-
-    let g2 = match damaged.captures(msg) {
+    let g2 = match r.logsquad_damaged.captures(msg) {
         Some(x) => {
             // Sometimes, someone damages nullptr. Ignore that.
             if &x[1] == "nullptr" {
@@ -452,10 +459,9 @@ fn parse_logtrace(
     timestamp: &DateTime<FixedOffset>,
     msg: &str,
     g: &GameState,
+    r: &Regexes,
 ) -> Option<GameState> {
-    let role = Regex::new(r"\[DedicatedServer\]ASQPlayerController::SetCurrentRole\(\): On Server PC=(.*) NewRole=(.*)").unwrap();
-
-    let g1 = match role.captures(msg) {
+    let g1 = match r.trace_role.captures(msg) {
         Some(c) => {
             if &c[2] != "nullptr" {
                 Some(player_spawned(timestamp, &c[1], &c[2], g))
@@ -466,9 +472,7 @@ fn parse_logtrace(
         None => None,
     };
 
-    let down = Regex::new(r"\[DedicatedServer\]ASQSoldier::Wound\(\): Player:(.*) KillingDamage=(\d+.\d+) from (.*) caused by (.*)").unwrap();
-
-    let g2 = match down.captures(msg) {
+    let g2 = match r.trace_down.captures(msg) {
         Some(c) => {
             if &c[1] == "nullptr" {
                 None
@@ -485,9 +489,7 @@ fn parse_logtrace(
         },
     };
 
-    let statechange = Regex::new(r"\[DedicatedServer\]ASQPlayerController::ChangeState\(\): PC=(.*) OldState=(.*) NewState=(.*)").unwrap();
-
-    let g3 = match statechange.captures(msg) {
+    let g3 = match r.trace_statechange.captures(msg) {
         Some(c) => match g2 {
             Some(t) => {
                 let newg = GameState {
@@ -517,10 +519,9 @@ fn parse_game_state(
     timestamp: &DateTime<FixedOffset>,
     msg: &str,
     g: &GameState,
+    r: &Regexes,
 ) -> Option<GameState> {
-    let game_state_change = Regex::new(r"Match State Changed from (\w+) to (\w+)$").unwrap();
-
-    match game_state_change.captures(msg) {
+    match r.game_state_change.captures(msg) {
         Some(x) => {
             match &x[2] {
                 "WaitingPostMatch" => {
@@ -552,10 +553,9 @@ fn parse_world_state(
     timestamp: &DateTime<FixedOffset>,
     msg: &str,
     g: &GameState,
+    r: &Regexes,
 ) -> Option<GameState> {
-    let world_state_change = Regex::new(r"StartLoadingDestination to: /Game/Maps/(.*)").unwrap();
-
-    let g1 = match world_state_change.captures(msg) {
+    let g1 = match r.world_state_change.captures(msg) {
         Some(x) => Some(starting_game(timestamp, &x[1], g)),
         None => None,
     };
@@ -563,9 +563,8 @@ fn parse_world_state(
     g1
 }
 
-fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
-    let logline_re = Regex::new(r"^\[(\d+.\d+.\d+-\d+.\d+.\d+:\d+)\]\[.*\](\w+): (.*)").unwrap();
-    match logline_re.captures(line) {
+fn parse_line(line: &str, g: &GameState, r: &Regexes) -> Option<GameState> {
+    match r.line.captures(line) {
         Some(c) => {
             // Update the timestamp if the current line is newer, even if we won't process this
             // line into an update to the game state.
@@ -580,10 +579,10 @@ fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
                 };
 
                 match &c[2] {
-                    "LogSquad" => parse_logsquad(&timestamp, &c[3], &cur_g),
-                    "LogSquadTrace" => parse_logtrace(&timestamp, &c[3], &cur_g),
-                    "LogGameState" => parse_game_state(&timestamp, &c[3], &cur_g),
-                    "LogWorld" => parse_world_state(&timestamp, &c[3], &cur_g),
+                    "LogSquad" => parse_logsquad(&timestamp, &c[3], &cur_g, &r),
+                    "LogSquadTrace" => parse_logtrace(&timestamp, &c[3], &cur_g, &r),
+                    "LogGameState" => parse_game_state(&timestamp, &c[3], &cur_g, &r),
+                    "LogWorld" => parse_world_state(&timestamp, &c[3], &cur_g, &r),
                     _ => Some(cur_g),
                 }
             }
@@ -681,10 +680,21 @@ fn main() {
         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
         .progress_chars("#>-"));
 
+    let r = Regexes {
+        logsquad_damaged: Regex::new(r"Player:(.*) ActualDamage=(\d+\.\d+) from (.*) caused by (.*)$").unwrap(),
+        logsquad_revived: Regex::new(r"(.*) has revived (.*)\.$").unwrap(),
+        line: Regex::new(r"^\[(\d+.\d+.\d+-\d+.\d+.\d+:\d+)\]\[.*\](\w+): (.*)").unwrap(),
+        trace_role: Regex::new(r"\[DedicatedServer\]ASQPlayerController::SetCurrentRole\(\): On Server PC=(.*) NewRole=(.*)").unwrap(),
+        trace_down: Regex::new(r"\[DedicatedServer\]ASQSoldier::Wound\(\): Player:(.*) KillingDamage=(\d+.\d+) from (.*) caused by (.*)").unwrap(),
+        trace_statechange: Regex::new(r"\[DedicatedServer\]ASQPlayerController::ChangeState\(\): PC=(.*) OldState=(.*) NewState=(.*)").unwrap(),
+        game_state_change: Regex::new(r"Match State Changed from (\w+) to (\w+)$").unwrap(),
+        world_state_change: Regex::new(r"StartLoadingDestination to: /Game/Maps/(.*)").unwrap()
+    };
+
     let mut new: u64 = 0;
     for line in &lines {
         new = new + (line.len() as u64);
-        match parse_line(line, &g) {
+        match parse_line(line, &g, &r) {
             Some(new_g) => g = new_g,
             None => (),
         }
