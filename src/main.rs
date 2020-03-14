@@ -594,11 +594,25 @@ fn parse_line(line: &str, g: &GameState, r: &Regexes) -> Option<GameState> {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct PlayerOutput {
     name: String,
+    count_kills: u32,
+    count_killed: u32,
+    count_revives: u32,
+    count_revived: u32,
     kills: HashMap<String, u32>,
     killed_by: HashMap<String, u32>,
     revives: HashMap<String, u32>,
     revived_by: HashMap<String, u32>,
     classes: HashSet<String>,
+}
+
+fn sum_map(m: &HashMap<String, u32>) -> u32 {
+    let mut res: u32 = 0;
+
+    for (_n, c) in m {
+        res += c;
+    }
+
+    res
 }
 
 fn print_lifetime_stats(g: &GameState) {
@@ -627,15 +641,24 @@ fn print_lifetime_stats(g: &GameState) {
                     }
 
                     PlayerOutput {
+                        count_kills: p.count_kills + sum_map(&player_state.players_killed),
+                        count_killed: p.count_killed + sum_map(&player_state.players_killed_by),
+                        count_revived: p.count_revived + sum_map(&player_state.players_revived_by),
+                        count_revives: p.count_revives + sum_map(&player_state.players_revived),
                         kills: new_kills,
                         killed_by: new_kills_by,
                         revives: new_revives,
                         revived_by: new_revived_by,
+                        classes: p.classes.union(&player_state.classes_played).cloned().collect(),
                         ..p.clone()
                     }
                 }
                 None => PlayerOutput {
                     name: player_name.clone(),
+                    count_kills: sum_map(&player_state.players_killed),
+                    count_killed: sum_map(&player_state.players_killed_by),
+                    count_revived: sum_map(&player_state.players_revived_by),
+                    count_revives: sum_map(&player_state.players_revived),
                     kills: player_state.players_killed.clone(),
                     killed_by: player_state.players_killed_by.clone(),
                     revives: player_state.players_revived.clone(),
