@@ -7,5 +7,7 @@ authors = [ "Andrew Ruef <awruef@outlook.com>" ]
 [dependencies]
 regex = "1"
 indicatif = "0.14.0"
-chrono = "0.4.11"
+chrono = { version = "0.4.11", features = ["serde"] }
 bimap = "0.4.0"
+serde = { version = "1.0.104", features = ["derive"] }
+serde_json = "1.0.48"

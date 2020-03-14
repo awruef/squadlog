@@ -2,6 +2,8 @@ extern crate bimap;
 extern crate chrono;
 extern crate indicatif;
 extern crate regex;
+extern crate serde;
+extern crate serde_json;
 
 use chrono::*;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -12,14 +14,16 @@ use std::env;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
+use serde_json::Result;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 enum PlayerState {
     Playing,
     Inactive,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct Player {
     name: String,
     state: PlayerState,
@@ -595,6 +599,10 @@ fn parse_line(line: &str, g: &GameState) -> Option<GameState> {
     }
 }
 
+fn print_lifetime_stats(g: &GameState) {
+
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -627,4 +635,6 @@ fn main() {
         }
         pb.set_position(new);
     }
+
+    print_lifetime_stats(&g);
 }
